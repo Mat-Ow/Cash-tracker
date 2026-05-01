@@ -6,7 +6,7 @@ const supabase = createClient(
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdpZmxob2NodG9zcXljbWVxeWt4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc1MzUyMDMsImV4cCI6MjA5MzExMTIwM30.uZtLpU1tDlJoCOvPbSzTNPoy9tXo2Efr56g9GUSuyXM"
 );
 
-const categories = ["Food", "Transport", "Home", "Fun", "Other"];
+const categories = ["Food", "Gas", "Home", "Other"];
 
 export default function App() {
   const [amount, setAmount] = useState("");
