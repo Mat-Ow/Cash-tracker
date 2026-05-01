@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
-  "https://supabase.com/dashboard/project/giflhochtosqycmeqykx",
+  "https://giflhochtosqycmeqykx.supabase.co",
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdpZmxob2NodG9zcXljbWVxeWt4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc1MzUyMDMsImV4cCI6MjA5MzExMTIwM30.uZtLpU1tDlJoCOvPbSzTNPoy9tXo2Efr56g9GUSuyXM"
 );
 
