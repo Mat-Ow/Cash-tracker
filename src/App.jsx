@@ -196,28 +196,22 @@ function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-
-
-console.log({ data, error });
-
   async function signUp() {
- 
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+    });
 
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-  });
+    console.log("SIGNUP RESPONSE:", data);
+    console.log("SIGNUP ERROR:", error);
 
-  console.log("SIGNUP RESPONSE:", data);
-  console.log("SIGNUP ERROR:", error);
+    if (error) {
+      alert(error.message);
+      return;
+    }
 
-  if (error) {
-    alert(error.message);
-    return;
+    alert("User created (check Supabase Auth users)");
   }
-
-  alert("User created (check Supabase Auth users)");
-}
 
   async function signIn() {
     const { error } = await supabase.auth.signInWithPassword({
@@ -247,7 +241,6 @@ console.log({ data, error });
     </div>
   );
 }
-
 /* ===================== APP ===================== */
 
 export default function App() {
