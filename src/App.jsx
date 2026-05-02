@@ -197,9 +197,21 @@ function AuthPage() {
   const [password, setPassword] = useState("");
 
   async function signUp() {
-    await supabase.auth.signUp({ email, password });
-    alert("Check your email!");
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+  });
+
+  console.log("SIGNUP RESPONSE:", data);
+  console.log("SIGNUP ERROR:", error);
+
+  if (error) {
+    alert(error.message);
+    return;
   }
+
+  alert("User created (check Supabase Auth users)");
+}
 
   async function signIn() {
     const { error } = await supabase.auth.signInWithPassword({
