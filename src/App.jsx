@@ -196,7 +196,13 @@ function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
+
+
+console.log({ data, error });
+
   async function signUp() {
+ 
+
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
