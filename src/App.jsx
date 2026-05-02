@@ -259,12 +259,31 @@ export default function App() {
   if (!session) {
     return <AuthPage />;
   }
+  
+async function logout() {
+  const { error } = await supabase.auth.signOut();
+  if (error) {
+    alert(error.message);
+  }
+}
 
   return (
     <div style={{ maxWidth: 400, margin: "auto", padding: 20 }}>
       <nav style={{ marginBottom: 20 }}>
         <Link to="/">Add</Link> |{" "}
         <Link to="/expenses">All Expenses</Link>
+        
+        <button
+    onClick={logout}
+    style={{
+      marginLeft: 10,
+      padding: "4px 8px",
+      cursor: "pointer"
+    }}
+  >
+    Logout
+  </button>
+  
       </nav>
 
       <Routes>
