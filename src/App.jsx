@@ -7,13 +7,12 @@ const supabase = createClient(
   import.meta.env.VITE_SUPABASE_ANON_KEY
 );
 
-const categories = ["Food", "Gas", "Home", "Other"];
-
 /* ===================== ADD PAGE ===================== */
 
 function AddPage() {
   const [amount, setAmount] = useState("");
-  const [category, setCategory] = useState("Food");
+  const [categoryId, setCategoryId] = useState(null);
+  const [categories, setCategories] = useState([]);
   const [note, setNote] = useState("");
   const [expenses, setExpenses] = useState([]);
   const [expense_date, setDate] = useState(() =>
@@ -29,7 +28,10 @@ function AddPage() {
 
     const { data } = await supabase
       .from("expenses")
-      .select("*")
+      .select(`
+        *,
+        categories ( name )
+      `)
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(20);
@@ -37,8 +39,29 @@ function AddPage() {
     setExpenses(data || []);
   }
 
+  async function fetchCategories() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) return;
+
+    const { data } = await supabase
+      .from("categories")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("name");
+
+    setCategories(data || []);
+
+    if (data?.length && !categoryId) {
+      setCategoryId(data[0].id);
+    }
+  }
+
   useEffect(() => {
     fetchExpenses();
+    fetchCategories();
   }, []);
 
   async function addExpense(e) {
@@ -53,12 +76,12 @@ function AddPage() {
       return;
     }
 
-    if (!amount) return;
+    if (!amount || !categoryId) return;
 
     await supabase.from("expenses").insert([
       {
         amount: parseFloat(amount),
-        category,
+        category_id: categoryId,
         note,
         expense_date,
         user_id: user.id,
@@ -77,6 +100,29 @@ function AddPage() {
     fetchExpenses();
   }
 
+  async function addCategory(name) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user || !name) return;
+
+    const { data } = await supabase
+      .from("categories")
+      .insert({
+        name,
+        user_id: user.id,
+        type: "expense",
+      })
+      .select()
+      .single();
+
+    if (data) {
+      setCategories((prev) => [...prev, data]);
+      setCategoryId(data.id);
+    }
+  }
+
   return (
     <>
       <h2>Cash Tracker</h2>
@@ -91,14 +137,28 @@ function AddPage() {
         />
 
         <select
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
+          value={categoryId || ""}
+          onChange={(e) => setCategoryId(e.target.value)}
           style={{ width: "100%", marginBottom: 10 }}
         >
           {categories.map((c) => (
-            <option key={c}>{c}</option>
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
           ))}
         </select>
+
+        <input
+          placeholder="Add new category and press Enter"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              addCategory(e.target.value.trim());
+              e.target.value = "";
+            }
+          }}
+          style={{ width: "100%", marginBottom: 10 }}
+        />
 
         <input
           placeholder="Note (optional)"
@@ -124,7 +184,8 @@ function AddPage() {
       <h3>Recent</h3>
       {expenses.map((e) => (
         <div key={e.id} style={{ marginBottom: 10 }}>
-          <strong>{e.amount} zł</strong> — {e.category}
+          <strong>{e.amount} zł</strong> —{" "}
+          {e.categories?.name || "No category"}
           <br />
           <small>{e.note}</small>
           <br />
@@ -153,7 +214,10 @@ function ExpensesPage() {
 
     const { data } = await supabase
       .from("expenses")
-      .select("*")
+      .select(`
+        *,
+        categories ( name )
+      `)
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
 
@@ -175,7 +239,8 @@ function ExpensesPage() {
 
       {expenses.map((e) => (
         <div key={e.id} style={{ marginBottom: 10 }}>
-          <strong>{e.amount} zł</strong> — {e.category}
+          <strong>{e.amount} zł</strong> —{" "}
+          {e.categories?.name || "No category"}
           <br />
           <small>{e.note}</small>
           <br />
@@ -197,20 +262,17 @@ function AuthPage() {
   const [password, setPassword] = useState("");
 
   async function signUp() {
-    const { data, error } = await supabase.auth.signUp({
+    const { error } = await supabase.auth.signUp({
       email,
       password,
     });
-
-    console.log("SIGNUP RESPONSE:", data);
-    console.log("SIGNUP ERROR:", error);
 
     if (error) {
       alert(error.message);
       return;
     }
 
-    alert("User created (check Supabase Auth users)");
+    alert("User created");
   }
 
   async function signIn() {
@@ -241,6 +303,7 @@ function AuthPage() {
     </div>
   );
 }
+
 /* ===================== APP ===================== */
 
 export default function App() {
@@ -256,34 +319,24 @@ export default function App() {
     });
   }, []);
 
-  if (!session) {
-    return <AuthPage />;
+  async function logout() {
+    const { error } = await supabase.auth.signOut();
+    if (error) alert(error.message);
   }
-  
-async function logout() {
-  const { error } = await supabase.auth.signOut();
-  if (error) {
-    alert(error.message);
-  }
-}
+
+  if (!session) return <AuthPage />;
 
   return (
     <div style={{ maxWidth: 400, margin: "auto", padding: 20 }}>
       <nav style={{ marginBottom: 20 }}>
         <Link to="/">Add</Link> |{" "}
         <Link to="/expenses">All Expenses</Link>
-        
         <button
-    onClick={logout}
-    style={{
-      marginLeft: 10,
-      padding: "4px 8px",
-      cursor: "pointer"
-    }}
-  >
-    Logout
-  </button>
-  
+          onClick={logout}
+          style={{ marginLeft: 10, padding: "4px 8px" }}
+        >
+          Logout
+        </button>
       </nav>
 
       <Routes>
