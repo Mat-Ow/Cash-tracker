@@ -26,15 +26,20 @@ function AddPage() {
 
     if (!user) return;
 
-    const { data } = await supabase
-      .from("expenses")
-      .select(`
-        *,
-        categories ( name )
-      `)
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(20);
+    const { data, error } = await supabase
+  .from("expenses")
+  .select(`
+    id,
+    amount,
+    note,
+    expense_date,
+    category_id,
+    categories:category_id ( name )
+  `)
+  .eq("user_id", user.id)
+  .order("created_at", { ascending: false });
+
+console.log(data, error);
 
     setExpenses(data || []);
   }
@@ -212,14 +217,20 @@ function ExpensesPage() {
 
     if (!user) return;
 
-    const { data } = await supabase
-      .from("expenses")
-      .select(`
-        *,
-        categories ( name )
-      `)
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
+    const { data, error } = await supabase
+  .from("expenses")
+  .select(`
+    id,
+    amount,
+    note,
+    expense_date,
+    category_id,
+    categories:category_id ( name )
+  `)
+  .eq("user_id", user.id)
+  .order("created_at", { ascending: false });
+
+console.log(data, error);
 
     setExpenses(data || []);
   }
