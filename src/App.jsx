@@ -105,28 +105,6 @@ console.log(data, error);
     fetchExpenses();
   }
 
-  async function addCategory(name) {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user || !name) return;
-
-    const { data } = await supabase
-      .from("categories")
-      .insert({
-        name,
-        user_id: user.id,
-        type: "expense",
-      })
-      .select()
-      .single();
-
-    if (data) {
-      setCategories((prev) => [...prev, data]);
-      setCategoryId(data.id);
-    }
-  }
 
   return (
     <>
@@ -153,17 +131,7 @@ console.log(data, error);
           ))}
         </select>
 
-        <input
-          placeholder="Add new category and press Enter"
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              addCategory(e.target.value.trim());
-              e.target.value = "";
-            }
-          }}
-          style={{ width: "100%", marginBottom: 10 }}
-        />
+       
 
         <input
           placeholder="Note (optional)"
@@ -225,7 +193,7 @@ function ExpensesPage() {
     note,
     expense_date,
     category_id,
-    categories:category_id ( name )
+    categories!inner (name)
   `)
   .eq("user_id", user.id)
   .order("created_at", { ascending: false });
@@ -315,6 +283,214 @@ function AuthPage() {
   );
 }
 
+
+/* ================== Category =================== */
+
+function CategoriesPage() {
+  const [categories, setCategories] = useState([]);
+  const [newCategory, setNewCategory] = useState("");
+
+  async function fetchCategories() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from("categories")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("name");
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    setCategories(data || []);
+  }
+
+  useEffect(() => {
+    fetchCategories();
+  }, []);
+
+  async function addCategory(e) {
+    e.preventDefault();
+
+    if (!newCategory.trim()) return;
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    const { error } = await supabase
+      .from("categories")
+      .insert({
+        name: newCategory.trim(),
+        user_id: user.id,
+        type: "expense",
+      });
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    setNewCategory("");
+    fetchCategories();
+  }
+
+  async function updateCategory(id, name) {
+    const trimmed = name.trim();
+
+    if (!trimmed) return;
+
+    const { error } = await supabase
+      .from("categories")
+      .update({ name: trimmed })
+      .eq("id", id);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    fetchCategories();
+  }
+
+  async function deleteCategory(id) {
+    const confirmed = window.confirm(
+      "Delete this category?"
+    );
+
+    if (!confirmed) return;
+
+    const { error } = await supabase
+      .from("categories")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    fetchCategories();
+  }
+
+  return (
+    <>
+      <h2>Categories</h2>
+
+      <form onSubmit={addCategory}>
+        <input
+          placeholder="New category"
+          value={newCategory}
+          onChange={(e) => setNewCategory(e.target.value)}
+          style={{
+            width: "100%",
+            marginBottom: 10,
+          }}
+        />
+
+        <button
+          type="submit"
+          style={{
+            width: "100%",
+            padding: 10,
+            marginBottom: 20,
+          }}
+        >
+          Add Category
+        </button>
+      </form>
+
+      {categories.map((c) => (
+        <CategoryRow
+          key={c.id}
+          category={c}
+          onSave={updateCategory}
+          onDelete={deleteCategory}
+        />
+      ))}
+    </>
+  );
+} 
+
+
+/* =============================================== */
+
+function CategoryRow({
+  category,
+  onSave,
+  onDelete,
+}) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(category.name);
+
+  return (
+    <div
+      style={{
+        border: "1px solid #ccc",
+        padding: 10,
+        marginBottom: 10,
+      }}
+    >
+      {editing ? (
+        <>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            style={{
+              width: "100%",
+              marginBottom: 10,
+            }}
+          />
+
+          <button
+            onClick={() => {
+              onSave(category.id, name);
+              setEditing(false);
+            }}
+            style={{ marginRight: 10 }}
+          >
+            Save
+          </button>
+
+          <button
+            onClick={() => {
+              setEditing(false);
+              setName(category.name);
+            }}
+          >
+            Cancel
+          </button>
+        </>
+      ) : (
+        <>
+          <strong>{category.name}</strong>
+
+          <br />
+
+          <button
+            onClick={() => setEditing(true)}
+            style={{ marginRight: 10 }}
+          >
+            Edit
+          </button>
+
+          <button
+            onClick={() => onDelete(category.id)}
+          >
+            Delete
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
 /* ===================== APP ===================== */
 
 export default function App() {
@@ -341,7 +517,8 @@ export default function App() {
     <div style={{ maxWidth: 400, margin: "auto", padding: 20 }}>
       <nav style={{ marginBottom: 20 }}>
         <Link to="/">Add</Link> |{" "}
-        <Link to="/expenses">All Expenses</Link>
+        <Link to="/expenses">All Expenses</Link> |{" "}
+        <Link to="/categories">Categories</Link>
         <button
           onClick={logout}
           style={{ marginLeft: 10, padding: "4px 8px" }}
@@ -353,6 +530,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<AddPage />} />
         <Route path="/expenses" element={<ExpensesPage />} />
+        <Route path="/categories" element={<CategoriesPage />} />
       </Routes>
     </div>
   );
