@@ -18,6 +18,9 @@ function AddPage() {
   const [expense_date, setDate] = useState(() =>
     new Date().toISOString().split("T")[0]
   );
+  const [type, setType] = useState("expense");
+  const [balance, setBalance] = useState(0);
+  
 
   async function fetchExpenses() {
     const {
@@ -34,6 +37,7 @@ function AddPage() {
     note,
     expense_date,
     category_id,
+    type,
     categories:category_id ( name )
   `)
   .eq("user_id", user.id)
@@ -43,31 +47,41 @@ console.log(data, error);
 
     setExpenses(data || []);
   }
+  
+async function fetchCategories() {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  async function fetchCategories() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+  if (!user) return;
 
-    if (!user) return;
+  const { data, error } = await supabase
+    .from("categories")
+    .select("*")
+    .eq("user_id", user.id)
+    .eq("type", type)
+    .order("name");
 
-    const { data } = await supabase
-      .from("categories")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("name");
-
-    setCategories(data || []);
-
-    if (data?.length && !categoryId) {
-      setCategoryId(data[0].id);
-    }
+  if (error) {
+    console.error(error);
+    return;
   }
+
+  setCategories(data || []);
+
+  // select first category automatically
+  if (data?.length) {
+    setCategoryId(data[0].id);
+  } else {
+    setCategoryId(null);
+  }
+}
 
   useEffect(() => {
     fetchExpenses();
     fetchCategories();
-  }, []);
+    fetchBalance();
+  }, [type]);
 
   async function addExpense(e) {
     e.preventDefault();
@@ -89,6 +103,7 @@ console.log(data, error);
         category_id: categoryId,
         note,
         expense_date,
+        type,
         user_id: user.id,
       },
     ]);
@@ -98,19 +113,59 @@ console.log(data, error);
     setDate(new Date().toISOString().split("T")[0]);
 
     fetchExpenses();
+    fetchBalance();
   }
 
   async function deleteExpense(id) {
     await supabase.from("expenses").delete().eq("id", id);
     fetchExpenses();
+    fetchBalance();
   }
+  
+  
+  async function fetchBalance() {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return;
+
+  const { data } = await supabase
+    .from("expenses")
+    .select("amount, type")
+    .eq("user_id", user.id);
+
+  let total = 0;
+
+  for (const row of data || []) {
+    if (row.type === "income") {
+      total += Number(row.amount);
+    } else {
+      total -= Number(row.amount);
+    }
+  }
+
+  setBalance(total);
+}
 
 
   return (
     <>
       <h2>Cash Tracker</h2>
 
+<h2>Balance: {balance.toFixed(2)} zł</h2>
+
       <form onSubmit={addExpense}>
+      
+      <select
+  value={type}
+  onChange={(e) => setType(e.target.value)}
+  style={{ width: "100%", marginBottom: 10 }}
+>
+  <option value="expense">Expense</option>
+  <option value="income">Income</option>
+</select>
+
         <input
           type="number"
           placeholder="Amount"
@@ -157,7 +212,10 @@ console.log(data, error);
       <h3>Recent</h3>
       {expenses.map((e) => (
         <div key={e.id} style={{ marginBottom: 10 }}>
-          <strong>{e.amount} zł</strong> —{" "}
+          <strong>
+  {e.type === "income" ? "+" : "-"}
+  {e.amount} zł
+</strong> —{" "}
           {e.categories?.name || "No category"}
           <br />
           <small>{e.note}</small>
@@ -193,6 +251,7 @@ function ExpensesPage() {
     note,
     expense_date,
     category_id,
+    type,
     categories!inner (name)
   `)
   .eq("user_id", user.id)
@@ -218,7 +277,10 @@ console.log(data, error);
 
       {expenses.map((e) => (
         <div key={e.id} style={{ marginBottom: 10 }}>
-          <strong>{e.amount} zł</strong> —{" "}
+          <strong>
+  {e.type === "income" ? "+" : "-"}
+  {e.amount} zł
+</strong> —{" "}
           {e.categories?.name || "No category"}
           <br />
           <small>{e.note}</small>
@@ -289,6 +351,7 @@ function AuthPage() {
 function CategoriesPage() {
   const [categories, setCategories] = useState([]);
   const [newCategory, setNewCategory] = useState("");
+  const [type, setType] = useState("expense");
 
   async function fetchCategories() {
     const {
@@ -329,7 +392,7 @@ function CategoriesPage() {
       .insert({
         name: newCategory.trim(),
         user_id: user.id,
-        type: "expense",
+        type: type,
       });
 
     if (error) {
@@ -382,6 +445,19 @@ function CategoriesPage() {
   return (
     <>
       <h2>Categories</h2>
+      
+<select
+  value={type}
+  onChange={(e) => setType(e.target.value)}
+  style={{
+    width: "100%",
+    marginBottom: 10,
+  }}
+>
+  <option value="expense">Expense</option>
+  <option value="income">Income</option>
+</select>
+
 
       <form onSubmit={addCategory}>
         <input
