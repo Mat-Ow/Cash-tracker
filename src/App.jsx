@@ -11,89 +11,88 @@ const supabase = createClient(
 
 function AddPage() {
   const [amount, setAmount] = useState("");
-  const [categoryId, setCategoryId] = useState(null);
+  const [categoryId, setCategoryId] = useState("");
   const [categories, setCategories] = useState([]);
   const [note, setNote] = useState("");
   const [expenses, setExpenses] = useState([]);
-  const [expense_date, setDate] = useState(() =>
+  const [type, setType] = useState("expense");
+  const [expense_date, setDate] = useState(
     new Date().toISOString().split("T")[0]
   );
-  const [type, setType] = useState("expense");
   const [balance, setBalance] = useState(0);
-  
 
   async function fetchExpenses() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const { data, error } = await supabase
-  .from("expenses")
-  .select(`
-    id,
-    amount,
-    note,
-    expense_date,
-    category_id,
-    type,
-    categories:category_id ( name )
-  `)
-  .eq("user_id", user.id)
-  .order("created_at", { ascending: false });
-
-console.log(data, error);
+    const { data } = await supabase
+      .from("expenses")
+      .select(`
+        id,
+        amount,
+        note,
+        expense_date,
+        type,
+        category_id,
+        categories:category_id ( name )
+      `)
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
 
     setExpenses(data || []);
   }
-  
-async function fetchCategories() {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
-  if (!user) return;
+  async function fetchCategories() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
-  const { data, error } = await supabase
-    .from("categories")
-    .select("*")
-    .eq("user_id", user.id)
-    .eq("type", type)
-    .order("name");
+    const { data } = await supabase
+      .from("categories")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("type", type);
 
-  if (error) {
-    console.error(error);
-    return;
+    setCategories(data || []);
+
+    const first = data?.find(c => !c.parent_id);
+    setCategoryId(first ? first.id : "");
   }
 
-  setCategories(data || []);
+  async function fetchBalance() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
-  // select first category automatically
-  if (data?.length) {
-    setCategoryId(data[0].id);
-  } else {
-    setCategoryId(null);
+    const { data } = await supabase
+      .from("expenses")
+      .select("amount, type")
+      .eq("user_id", user.id);
+
+    let total = 0;
+
+    for (const row of data || []) {
+      total += row.type === "income"
+        ? Number(row.amount)
+        : -Number(row.amount);
+    }
+
+    setBalance(total);
   }
-}
 
   useEffect(() => {
     fetchExpenses();
-    fetchCategories();
     fetchBalance();
+  }, []);
+
+  useEffect(() => {
+    setCategoryId("");
+    fetchCategories();
   }, [type]);
 
   async function addExpense(e) {
     e.preventDefault();
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      alert("Not logged in");
-      return;
-    }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
     if (!amount || !categoryId) return;
 
@@ -110,8 +109,6 @@ async function fetchCategories() {
 
     setAmount("");
     setNote("");
-    setDate(new Date().toISOString().split("T")[0]);
-
     fetchExpenses();
     fetchBalance();
   }
@@ -121,77 +118,71 @@ async function fetchCategories() {
     fetchExpenses();
     fetchBalance();
   }
-  
-  
-  async function fetchBalance() {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return;
-
-  const { data } = await supabase
-    .from("expenses")
-    .select("amount, type")
-    .eq("user_id", user.id);
-
-  let total = 0;
-
-  for (const row of data || []) {
-    if (row.type === "income") {
-      total += Number(row.amount);
-    } else {
-      total -= Number(row.amount);
-    }
-  }
-
-  setBalance(total);
-}
-
 
   return (
     <>
       <h2>Cash Tracker</h2>
 
-<h2>Balance: {balance.toFixed(2)} zł</h2>
+      <h2>
+        Balance: {balance >= 0 ? "+" : ""}
+        {balance.toFixed(2)} zł
+      </h2>
 
       <form onSubmit={addExpense}>
-      
-      <select
-  value={type}
-  onChange={(e) => setType(e.target.value)}
-  style={{ width: "100%", marginBottom: 10 }}
->
-  <option value="expense">Expense</option>
-  <option value="income">Income</option>
-</select>
+        <select
+          value={type}
+          onChange={(e) => setType(e.target.value)}
+          style={{ width: "100%", marginBottom: 10 }}
+        >
+          <option value="expense">Expense</option>
+          <option value="income">Income</option>
+        </select>
 
         <input
           type="number"
-          placeholder="Amount"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           style={{ width: "100%", fontSize: 24, marginBottom: 10 }}
         />
 
         <select
-          value={categoryId || ""}
+          value={categoryId}
           onChange={(e) => setCategoryId(e.target.value)}
           style={{ width: "100%", marginBottom: 10 }}
         >
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
+          <option value="">Select category</option>
+
+          {categories
+            .filter(c => !c.parent_id)
+            .map(parent => {
+              const children = categories.filter(
+                c => c.parent_id === parent.id
+              );
+
+              if (!children.length) {
+                return (
+                  <option key={parent.id} value={parent.id}>
+                    {parent.name}
+                  </option>
+                );
+              }
+
+              return (
+                <optgroup key={parent.id} label={parent.name}>
+                  {children.map(child => (
+                    <option key={child.id} value={child.id}>
+                      ↳ {child.name}
+                    </option>
+                  ))}
+                </optgroup>
+              );
+            })}
         </select>
 
-       
-
         <input
-          placeholder="Note (optional)"
           value={note}
           onChange={(e) => setNote(e.target.value)}
+          placeholder="Note"
           style={{ width: "100%", marginBottom: 10 }}
         />
 
@@ -210,21 +201,18 @@ async function fetchCategories() {
       <hr />
 
       <h3>Recent</h3>
-      {expenses.map((e) => (
+
+      {expenses.map(e => (
         <div key={e.id} style={{ marginBottom: 10 }}>
           <strong>
-  {e.type === "income" ? "+" : "-"}
-  {e.amount} zł
-</strong> —{" "}
-          {e.categories?.name || "No category"}
+            {e.type === "income" ? "+" : "-"}
+            {e.amount} zł
+          </strong>{" "}
+          — {e.categories?.name || "No category"}
           <br />
           <small>{e.note}</small>
           <br />
-          <small>{e.expense_date}</small>
-          <br />
-          <button onClick={() => deleteExpense(e.id)}>
-            Delete
-          </button>
+          <button onClick={() => deleteExpense(e.id)}>Delete</button>
         </div>
       ))}
     </>
@@ -237,27 +225,21 @@ function ExpensesPage() {
   const [expenses, setExpenses] = useState([]);
 
   async function fetchExpenses() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const { data, error } = await supabase
-  .from("expenses")
-  .select(`
-    id,
-    amount,
-    note,
-    expense_date,
-    category_id,
-    type,
-    categories!inner (name)
-  `)
-  .eq("user_id", user.id)
-  .order("created_at", { ascending: false });
-
-console.log(data, error);
+    const { data } = await supabase
+      .from("expenses")
+      .select(`
+        id,
+        amount,
+        note,
+        expense_date,
+        type,
+        categories:category_id ( name )
+      `)
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
 
     setExpenses(data || []);
   }
@@ -275,69 +257,43 @@ console.log(data, error);
     <>
       <h2>All Expenses</h2>
 
-      {expenses.map((e) => (
-        <div key={e.id} style={{ marginBottom: 10 }}>
+      {expenses.map(e => (
+        <div key={e.id}>
           <strong>
-  {e.type === "income" ? "+" : "-"}
-  {e.amount} zł
-</strong> —{" "}
-          {e.categories?.name || "No category"}
+            {e.type === "income" ? "+" : "-"}
+            {e.amount} zł
+          </strong>{" "}
+          — {e.categories?.name || "No category"}
           <br />
           <small>{e.note}</small>
           <br />
-          <small>{e.expense_date}</small>
-          <br />
-          <button onClick={() => deleteExpense(e.id)}>
-            Delete
-          </button>
+          <button onClick={() => deleteExpense(e.id)}>Delete</button>
         </div>
       ))}
     </>
   );
 }
 
-/* ===================== AUTH PAGE ===================== */
+/* ===================== AUTH ===================== */
 
 function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  async function signUp() {
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    alert("User created");
+  async function signIn() {
+    await supabase.auth.signInWithPassword({ email, password });
   }
 
-  async function signIn() {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error) alert(error.message);
+  async function signUp() {
+    await supabase.auth.signUp({ email, password });
   }
 
   return (
     <div>
       <h2>Login</h2>
 
-      <input
-        placeholder="Email"
-        onChange={(e) => setEmail(e.target.value)}
-      />
-      <input
-        type="password"
-        placeholder="Password"
-        onChange={(e) => setPassword(e.target.value)}
-      />
+      <input onChange={e => setEmail(e.target.value)} placeholder="Email" />
+      <input onChange={e => setPassword(e.target.value)} placeholder="Password" type="password" />
 
       <button onClick={signIn}>Login</button>
       <button onClick={signUp}>Sign up</button>
@@ -345,31 +301,22 @@ function AuthPage() {
   );
 }
 
-
-/* ================== Category =================== */
+/* ===================== CATEGORIES ===================== */
 
 function CategoriesPage() {
   const [categories, setCategories] = useState([]);
   const [newCategory, setNewCategory] = useState("");
   const [type, setType] = useState("expense");
+  const [parentId, setParentId] = useState("");
 
   async function fetchCategories() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("categories")
       .select("*")
-      .eq("user_id", user.id)
-      .order("name");
-
-    if (error) {
-      console.error(error);
-      return;
-    }
+      .eq("user_id", user.id);
 
     setCategories(data || []);
   }
@@ -381,186 +328,105 @@ function CategoriesPage() {
   async function addCategory(e) {
     e.preventDefault();
 
-    if (!newCategory.trim()) return;
+    const { data: { user } } = await supabase.auth.getUser();
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    const { error } = await supabase
-      .from("categories")
-      .insert({
-        name: newCategory.trim(),
+    await supabase.from("categories").insert([
+      {
+        name: newCategory,
+        type,
+        parent_id: parentId || null,
         user_id: user.id,
-        type: type,
-      });
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
+      },
+    ]);
 
     setNewCategory("");
+    setParentId("");
     fetchCategories();
   }
 
   async function updateCategory(id, name) {
-    const trimmed = name.trim();
-
-    if (!trimmed) return;
-
-    const { error } = await supabase
+    await supabase
       .from("categories")
-      .update({ name: trimmed })
+      .update({ name })
       .eq("id", id);
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
 
     fetchCategories();
   }
 
   async function deleteCategory(id) {
-    const confirmed = window.confirm(
-      "Delete this category?"
-    );
-
-    if (!confirmed) return;
-
-    const { error } = await supabase
-      .from("categories")
-      .delete()
-      .eq("id", id);
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
+    await supabase.from("categories").delete().eq("id", id);
     fetchCategories();
   }
 
   return (
     <>
       <h2>Categories</h2>
-      
-<select
-  value={type}
-  onChange={(e) => setType(e.target.value)}
-  style={{
-    width: "100%",
-    marginBottom: 10,
-  }}
->
-  <option value="expense">Expense</option>
-  <option value="income">Income</option>
-</select>
-
 
       <form onSubmit={addCategory}>
+        <select value={type} onChange={e => setType(e.target.value)}>
+          <option value="expense">Expense</option>
+          <option value="income">Income</option>
+        </select>
+
+        <select value={parentId} onChange={e => setParentId(e.target.value)}>
+          <option value="">No parent</option>
+
+          {categories
+            .filter(c => !c.parent_id && c.type === type)
+            .map(c => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+        </select>
+
         <input
-          placeholder="New category"
           value={newCategory}
-          onChange={(e) => setNewCategory(e.target.value)}
-          style={{
-            width: "100%",
-            marginBottom: 10,
-          }}
+          onChange={e => setNewCategory(e.target.value)}
         />
 
-        <button
-          type="submit"
-          style={{
-            width: "100%",
-            padding: 10,
-            marginBottom: 20,
-          }}
-        >
-          Add Category
-        </button>
+        <button>Add</button>
       </form>
 
-      {categories.map((c) => (
-        <CategoryRow
-          key={c.id}
-          category={c}
-          onSave={updateCategory}
-          onDelete={deleteCategory}
-        />
-      ))}
+      {categories
+        .filter(c => c.type === type && !c.parent_id)
+        .map(parent => (
+          <div key={parent.id}>
+            <CategoryRow category={parent} onSave={updateCategory} onDelete={deleteCategory} />
+
+            {categories
+              .filter(c => c.parent_id === parent.id)
+              .map(child => (
+                <div key={child.id} style={{ marginLeft: 20 }}>
+                  <CategoryRow
+                    category={child}
+                    onSave={updateCategory}
+                    onDelete={deleteCategory}
+                  />
+                </div>
+              ))}
+          </div>
+        ))}
     </>
   );
-} 
+}
 
-
-/* =============================================== */
-
-function CategoryRow({
-  category,
-  onSave,
-  onDelete,
-}) {
-  const [editing, setEditing] = useState(false);
+function CategoryRow({ category, onSave, onDelete }) {
+  const [edit, setEdit] = useState(false);
   const [name, setName] = useState(category.name);
 
   return (
-    <div
-      style={{
-        border: "1px solid #ccc",
-        padding: 10,
-        marginBottom: 10,
-      }}
-    >
-      {editing ? (
+    <div>
+      {edit ? (
         <>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            style={{
-              width: "100%",
-              marginBottom: 10,
-            }}
-          />
-
-          <button
-            onClick={() => {
-              onSave(category.id, name);
-              setEditing(false);
-            }}
-            style={{ marginRight: 10 }}
-          >
-            Save
-          </button>
-
-          <button
-            onClick={() => {
-              setEditing(false);
-              setName(category.name);
-            }}
-          >
-            Cancel
-          </button>
+          <input value={name} onChange={e => setName(e.target.value)} />
+          <button onClick={() => { onSave(category.id, name); setEdit(false); }}>Save</button>
         </>
       ) : (
         <>
-          <strong>{category.name}</strong>
-
-          <br />
-
-          <button
-            onClick={() => setEditing(true)}
-            style={{ marginRight: 10 }}
-          >
-            Edit
-          </button>
-
-          <button
-            onClick={() => onDelete(category.id)}
-          >
-            Delete
-          </button>
+          {category.name}
+          <button onClick={() => setEdit(true)}>Edit</button>
+          <button onClick={() => onDelete(category.id)}>Delete</button>
         </>
       )}
     </div>
@@ -577,30 +443,22 @@ export default function App() {
       setSession(data.session);
     });
 
-    supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
+    supabase.auth.onAuthStateChange((_e, s) => setSession(s));
   }, []);
 
   async function logout() {
-    const { error } = await supabase.auth.signOut();
-    if (error) alert(error.message);
+    await supabase.auth.signOut();
   }
 
   if (!session) return <AuthPage />;
 
   return (
-    <div style={{ maxWidth: 400, margin: "auto", padding: 20 }}>
-      <nav style={{ marginBottom: 20 }}>
+    <div style={{ maxWidth: 400, margin: "auto" }}>
+      <nav>
         <Link to="/">Add</Link> |{" "}
-        <Link to="/expenses">All Expenses</Link> |{" "}
+        <Link to="/expenses">Expenses</Link> |{" "}
         <Link to="/categories">Categories</Link>
-        <button
-          onClick={logout}
-          style={{ marginLeft: 10, padding: "4px 8px" }}
-        >
-          Logout
-        </button>
+        <button onClick={logout}>Logout</button>
       </nav>
 
       <Routes>
